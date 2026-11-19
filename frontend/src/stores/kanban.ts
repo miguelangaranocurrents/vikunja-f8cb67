@@ -362,24 +362,35 @@ export const useKanbanStore = defineStore('kanban', () => {
 	async function updateBucket(updatedBucketData: Partial<IBucket>) {
 		const cancel = setModuleLoading(setIsLoading)
 
-		const bucketIndex = findIndexById(buckets.value, updatedBucketData.id)
-		const oldBucket = klona(buckets.value[bucketIndex])
+		// The user can navigate to another view while the request is in flight, which replaces
+		// `buckets` with the other view's buckets. Only write results back into the board they belong to.
+		const board = buckets.value
+		const isBoardCurrent = () => buckets.value === board
+
+		const bucketIndex = findIndexById(board, updatedBucketData.id)
+		const oldBucket = bucketIndex === -1 ? undefined : klona(board[bucketIndex])
 
 		const updatedBucket = {
 			...oldBucket,
 			...updatedBucketData,
 		}
 
-		setBucketByIndex(bucketIndex, updatedBucket)
+		if (bucketIndex !== -1) {
+			setBucketByIndex(bucketIndex, updatedBucket)
+		}
 
 		const bucketService = new BucketService()
 		try {
 			const returnedBucket = await bucketService.update(updatedBucket)
-			setBucketByIndex(bucketIndex, returnedBucket)
+			if (bucketIndex !== -1 && isBoardCurrent()) {
+				setBucketByIndex(bucketIndex, returnedBucket)
+			}
 			return returnedBucket
 		} catch (e) {
 			// restore original state
-			setBucketByIndex(bucketIndex, oldBucket)
+			if (oldBucket && isBoardCurrent()) {
+				setBucketByIndex(bucketIndex, oldBucket)
+			}
 
 			throw e
 		} finally {
